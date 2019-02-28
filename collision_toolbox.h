@@ -1,14 +1,10 @@
-struct _Cercle;
 typedef struct _Cercle Cercle;
 
-struct _AABB;
 typedef struct _AABB AABB;
 
-int CollisionPointAABB(GLfloat curseur_x, GLfloat curseur_y, AABB box);
+typedef struct _Point Point;
 
-int CollisionPointCercle(GLfloat x, GLfloat y, Cercle C);
+typedef struct _Vecteur Vecteur;
 
 int CollisionCercleAABB(Cercle C1, AABB box1);
-
-int ProjectionSurSegment(GLfloat Cx, GLfloat Cy, GLfloat Ax, GLfloat Ay,
-                         GLfloat Bx, GLfloat By);
+int CollisionAABBSeg(AABB box, Point A, Point B);

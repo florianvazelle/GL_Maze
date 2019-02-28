@@ -5,24 +5,22 @@
  * \author Farès BELHADJ, amsi@ai.univ-paris8.fr
  * \date March 05 2018
  */
+#include "collision_toolbox.h"
 #include <GL4D/gl4dg.h>
 #include <GL4D/gl4dp.h>
 #include <GL4D/gl4duw_SDL2.h>
 #include <SDL_image.h>
-#include "collision_toolbox.h"
 
-struct _Cercle
-{
-        GLfloat x,y;
-        GLfloat rayon;
+struct _Cercle {
+        GLfloat x, y, rayon;
 };
 
-struct _AABB
-{
-        GLfloat x;
-        GLfloat y;
-        GLfloat w;
-        GLfloat h;
+struct _AABB {
+        GLfloat x, y, w, h;
+};
+
+struct _Point {
+        GLfloat x, y;
 };
 
 static void quit(void);
@@ -36,17 +34,17 @@ static void pmotion(int x, int y);
 static void draw(void);
 
 static void walls(void);
-int hit(Cercle);
+int hit(Cercle, Point);
 
 /* from makeLabyrinth.c */
-extern unsigned int * labyrinth(int w, int h);
+extern unsigned int *labyrinth(int w, int h);
 
 /*!\brief opened window width and height */
 static int _wW = 800, _wH = 600;
 /*!\brief mouse position (modified by pmotion function) */
 static int _xm = 400, _ym = 300;
 /*!\brief labyrinth to generate */
-static GLuint * _labyrinth = NULL;
+static GLuint *_labyrinth = NULL;
 /*!\brief labyrinth side */
 static GLuint _lab_side = 15;
 /*!\brief Quad geometry Id  */
@@ -69,12 +67,7 @@ static GLboolean _mipmap = GL_FALSE;
 static GLuint _wallTexId = 0;
 
 /*!\brief enum that index keyboard mapping for direction commands */
-enum kyes_t {
-        KLEFT = 0,
-        KRIGHT,
-        KUP,
-        KDOWN
-};
+enum kyes_t { KLEFT = 0, KRIGHT, KUP, KDOWN };
 
 /*!\brief virtual keyboard for direction commands */
 static GLuint _keys[] = {0, 0, 0, 0};
@@ -90,12 +83,18 @@ struct cam_t {
 /*!\brief the used camera */
 static cam_t _cam = {0, 0, 0};
 
+float vec[4][2] = {
+        {0.0f, 1.0f}, // up
+        {1.0f, 0.0f}, // right
+        {0.0f, -1.0f}, // down
+        {-1.0f, 0.0f} // left
+};
 
 /*!\brief creates the window, initializes OpenGL parameters,
  * initializes data and maps callback functions */
-int main(int argc, char ** argv) {
-        if(!gl4duwCreateWindow(argc, argv, "GL4Dummies", 10, 10,
-                               _wW, _wH, GL4DW_RESIZABLE | GL4DW_SHOWN))
+int main(int argc, char **argv) {
+        if (!gl4duwCreateWindow(argc, argv, "GL4Dummies", 10, 10, _wW, _wH,
+                                GL4DW_RESIZABLE | GL4DW_SHOWN))
                 return 1;
         initGL();
         initData();
@@ -123,7 +122,8 @@ static void initGL(void) {
         glEnable(GL_CULL_FACE);
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_TEXTURE_2D);
-        _pId  = gl4duCreateProgram("<vs>shaders/basic.vs", "<fs>shaders/basic.fs", NULL);
+        _pId =
+                gl4duCreateProgram("<vs>shaders/basic.vs", "<fs>shaders/basic.fs", NULL);
         gl4duGenMatrix(GL_FLOAT, "modelMatrix");
         gl4duGenMatrix(GL_FLOAT, "viewMatrix");
         gl4duGenMatrix(GL_FLOAT, "projectionMatrix");
@@ -150,7 +150,8 @@ static void initData(void) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
         _labyrinth = labyrinth(_lab_side, _lab_side);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _lab_side, _lab_side, 0, GL_RGBA, GL_UNSIGNED_BYTE, _labyrinth);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _lab_side, _lab_side, 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, _labyrinth);
 
         /* creation and parametrization of the compass texture */
         glGenTextures(1, &_compassTexId);
@@ -159,25 +160,27 @@ static void initData(void) {
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE, northsouth);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     northsouth);
 
-
-        SDL_Surface * t;
+        SDL_Surface *t;
         glGenTextures(1, &_wallTexId);
         glBindTexture(GL_TEXTURE_2D, _wallTexId);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        if((t = IMG_Load("images/wall.jpeg")) != NULL ) {
-          #ifdef __APPLE__
+        if ((t = IMG_Load("images/wall.jpeg")) != NULL) {
+#ifdef __APPLE__
                 int mode = t->format->BytesPerPixel == 4 ? GL_BGRA : GL_BGR;
-          #else
+#else
                 int mode = t->format->BytesPerPixel == 4 ? GL_RGBA : GL_RGB;
-          #endif
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _planeScale, _planeScale, 0, mode, GL_UNSIGNED_BYTE, t->pixels);
+#endif
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _planeScale, _planeScale, 0, mode,
+                             GL_UNSIGNED_BYTE, t->pixels);
                 SDL_FreeSurface(t);
         } else {
                 fprintf(stderr, "can't open file images/wall.jpeg : %s\n", SDL_GetError());
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                             NULL);
         }
 
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -195,7 +198,8 @@ static void resize(int w, int h) {
         glViewport(0, 0, _wW, _wH);
         gl4duBindMatrix("projectionMatrix");
         gl4duLoadIdentityf();
-        gl4duFrustumf(-0.5, 0.5, -0.5 * _wH / _wW, 0.5 * _wH / _wW, 1.0, _planeScale + 1.0);
+        gl4duFrustumf(-0.5, 0.5, -0.5 * _wH / _wW, 0.5 * _wH / _wW, 1.0,
+                      _planeScale + 1.0);
 }
 
 /*!\brief Help to carry out your work. Tracking the position in the
@@ -214,20 +218,26 @@ static void updatePosition(void) {
         xf = xf * _lab_side;
         zf = zf * _lab_side;
         /* re-set previous position to black and the new one to red */
-        if((int)xf != xi || (int)zf != zi) {
-                if(xi >= 0 && xi < _lab_side && zi >= 0 && zi < _lab_side && _labyrinth[zi * _lab_side + xi] != -1) {
+        if ((int)xf != xi || (int)zf != zi) {
+                if (xi >= 0 && xi < _lab_side && zi >= 0 && zi < _lab_side &&
+                    _labyrinth[zi * _lab_side + xi] != -1) {
                         _labyrinth[zi * _lab_side + xi] = 0;
                         glBindTexture(GL_TEXTURE_2D, _planeTexId);
-                        /* try to use the glTexSubImage2D function instead of the glTexImage2D function */
-                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _lab_side, _lab_side, 0, GL_RGBA, GL_UNSIGNED_BYTE, _labyrinth);
+                        /* try to use the glTexSubImage2D function instead of the glTexImage2D
+                         * function */
+                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _lab_side, _lab_side, 0, GL_RGBA,
+                                     GL_UNSIGNED_BYTE, _labyrinth);
                 }
                 xi = (int)xf;
                 zi = (int)zf;
-                if(xi >= 0 && xi < _lab_side && zi >= 0 && zi < _lab_side && _labyrinth[zi * _lab_side + xi] != -1) {
+                if (xi >= 0 && xi < _lab_side && zi >= 0 && zi < _lab_side &&
+                    _labyrinth[zi * _lab_side + xi] != -1) {
                         _labyrinth[zi * _lab_side + xi] = RGB(255, 0, 0);
                         glBindTexture(GL_TEXTURE_2D, _planeTexId);
-                        /* try to use the glTexSubImage2D function instead of the glTexImage2D function */
-                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _lab_side, _lab_side, 0, GL_RGBA, GL_UNSIGNED_BYTE, _labyrinth);
+                        /* try to use the glTexSubImage2D function instead of the glTexImage2D
+                         * function */
+                        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, _lab_side, _lab_side, 0, GL_RGBA,
+                                     GL_UNSIGNED_BYTE, _labyrinth);
                 }
         }
 }
@@ -238,33 +248,53 @@ static void updatePosition(void) {
  * direction, orientation and time (dt = delta-time)
  */
 static void idle(void) {
+        Point old;
         Cercle player;
 
         double dt, dtheta = M_PI, step = 30.0;
         static double t0 = 0, t;
         dt = ((t = gl4dGetElapsedTime()) - t0) / 1000.0;
         t0 = t;
-        if(_keys[KLEFT])
+        if (_keys[KLEFT])
                 _cam.theta += dt * dtheta;
-        if(_keys[KRIGHT])
+        if (_keys[KRIGHT])
                 _cam.theta -= dt * dtheta;
 
-        player.x = _cam.x;
-        player.y = _cam.z;
+        player.x = old.x = _cam.x;
+        player.y = old.y = _cam.z;
         player.rayon = 1.5f;
-        if(_keys[KUP]) {
+
+        if (_keys[KUP]) {
                 player.x += -dt * step * sin(_cam.theta);
                 player.y += -dt * step * cos(_cam.theta);
         }
-        if(_keys[KDOWN]) {
+        if (_keys[KDOWN]) {
                 player.x += dt * step * sin(_cam.theta);
                 player.y += dt * step * cos(_cam.theta);
         }
 
-        if(hit(player) == 0) {
+        int res_col = hit(player, old);
+        if (res_col == 2) {
+                int res_s = (sin(_cam.theta) == 0) ? 0 : (sin(_cam.theta) > 0) ? 1 : -1;
+                if (_keys[KUP]) {
+                        _cam.x += -dt * step * res_s;
+                }
+                if (_keys[KDOWN]) {
+                        _cam.x += dt * step * res_s;
+                }
+        } else if (res_col == 3) {
+                int res_c = (cos(_cam.theta) == 0) ? 0 : (cos(_cam.theta) > 0) ? 1 : -1;
+                if (_keys[KUP]) {
+                        _cam.z += -dt * step * res_c;
+                }
+                if (_keys[KDOWN]) {
+                        _cam.z += dt * step * res_c;
+                }
+        } else if (res_col == 0) {
                 _cam.x = player.x;
                 _cam.z = player.y;
         }
+
         updatePosition();
 }
 
@@ -276,7 +306,7 @@ static void idle(void) {
  */
 static void keydown(int keycode) {
         GLint v[2];
-        switch(keycode) {
+        switch (keycode) {
         case GL4DK_LEFT:
                 _keys[KLEFT] = 1;
                 break;
@@ -295,7 +325,7 @@ static void keydown(int keycode) {
         /* when 'w' pressed, toggle between line and filled mode */
         case 'w':
                 glGetIntegerv(GL_POLYGON_MODE, v);
-                if(v[0] == GL_FILL) {
+                if (v[0] == GL_FILL) {
                         glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
                         glLineWidth(3.0);
                 } else {
@@ -303,12 +333,15 @@ static void keydown(int keycode) {
                         glLineWidth(1.0);
                 }
                 break;
-        /* when 'm' pressed, toggle between mipmapping or nearest for the plane texture */
+        /* when 'm' pressed, toggle between mipmapping or nearest for the plane
+         * texture */
         case 'm': {
                 _mipmap = !_mipmap;
                 glBindTexture(GL_TEXTURE_2D, _planeTexId);
-                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, _mipmap ? GL_LINEAR_MIPMAP_LINEAR : GL_NEAREST);
-                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, _mipmap ? GL_LINEAR_MIPMAP_LINEAR : GL_NEAREST);
+                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                                _mipmap ? GL_LINEAR_MIPMAP_LINEAR : GL_NEAREST);
+                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                                _mipmap ? GL_LINEAR_MIPMAP_LINEAR : GL_NEAREST);
                 glGenerateMipmap(GL_TEXTURE_2D);
                 glBindTexture(GL_TEXTURE_2D, 0);
                 break;
@@ -316,14 +349,15 @@ static void keydown(int keycode) {
         /* when 'a' pressed, toggle on/off the anisotropic mode */
         case 'a': {
                 _anisotropic = !_anisotropic;
-                /* l'Anisotropic sous GL ne fonctionne que si la version de la
-                   bibliothèque le supporte ; supprimer le bloc ci-après si
-                   problème à la compilation. */
+/* l'Anisotropic sous GL ne fonctionne que si la version de la
+   bibliothèque le supporte ; supprimer le bloc ci-après si
+   problème à la compilation. */
 #ifdef GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
                 GLfloat max;
                 glBindTexture(GL_TEXTURE_2D, _planeTexId);
                 glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max);
-                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, _anisotropic ? max : 1.0f);
+                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT,
+                                _anisotropic ? max : 1.0f);
                 glBindTexture(GL_TEXTURE_2D, 0);
 #endif
                 break;
@@ -339,7 +373,7 @@ static void keydown(int keycode) {
  * stores the virtual keyboard states (0 = released).
  */
 static void keyup(int keycode) {
-        switch(keycode) {
+        switch (keycode) {
         case GL4DK_LEFT:
                 _keys[KLEFT] = 0;
                 break;
@@ -357,7 +391,8 @@ static void keyup(int keycode) {
         }
 }
 
-/*!\brief function called by GL4Dummies' loop at the passive mouse motion event.*/
+/*!\brief function called by GL4Dummies' loop at the passive mouse motion
+ * event.*/
 static void pmotion(int x, int y) {
         _xm = x;
         _ym = y;
@@ -370,15 +405,18 @@ static void draw(void) {
         /* sets the current program shader to _pId */
         glUseProgram(_pId);
         gl4duBindMatrix("viewMatrix");
-        /* loads the identity matrix in the current GL4Dummies matrix ("viewMatrix") */
+        /* loads the identity matrix in the current GL4Dummies matrix ("viewMatrix")
+         */
         gl4duLoadIdentityf();
-        /* modifies the current matrix to simulate camera position and orientation in the scene */
+        /* modifies the current matrix to simulate camera position and orientation in
+         * the scene */
         /* see gl4duLookAtf documentation or gluLookAt documentation */
-        gl4duLookAtf(_cam.x, 3.0, _cam.z,
-                     _cam.x - sin(_cam.theta), 3.0 - (_ym - (_wH >> 1)) / (GLfloat)_wH, _cam.z - cos(_cam.theta),
-                     0.0, 1.0,0.0);
+        gl4duLookAtf(_cam.x, 3.0, _cam.z, _cam.x - sin(_cam.theta),
+                     3.0 - (_ym - (_wH >> 1)) / (GLfloat)_wH,
+                     _cam.z - cos(_cam.theta), 0.0, 1.0, 0.0);
         gl4duBindMatrix("modelMatrix");
-        /* loads the identity matrix in the current GL4Dummies matrix ("modelMatrix") */
+        /* loads the identity matrix in the current GL4Dummies matrix ("modelMatrix")
+         */
         gl4duLoadIdentityf();
         /* sets the current texture stage to 0 */
         glActiveTexture(GL_TEXTURE0);
@@ -387,11 +425,13 @@ static void draw(void) {
 
         /* pushs (saves) the current matrix (modelMatrix), scales, rotates,
          * sends matrices to pId and then pops (restore) the matrix */
-        gl4duPushMatrix(); {
+        gl4duPushMatrix();
+        {
                 gl4duRotatef(-90, 1, 0, 0);
                 gl4duScalef(_planeScale, _planeScale, 1);
                 gl4duSendMatrices();
-        } gl4duPopMatrix();
+        }
+        gl4duPopMatrix();
         /* culls the back faces */
         glCullFace(GL_BACK);
         /* uses the checkboard texture */
@@ -411,23 +451,29 @@ static void draw(void) {
          * matrix; bind the projection matrix and restore it; and then
          * re-bind the model-view matrix for after.*/
         gl4duBindMatrix("projectionMatrix");
-        gl4duPushMatrix(); {
+        gl4duPushMatrix();
+        {
                 gl4duLoadIdentityf();
                 gl4duBindMatrix("modelMatrix");
-                gl4duPushMatrix(); {
+                gl4duPushMatrix();
+                {
                         gl4duLoadIdentityf();
                         gl4duTranslatef(-0.75, 0.7, 0.0);
                         gl4duRotatef(-_cam.theta * 180.0 / M_PI, 0, 0, 1);
                         gl4duScalef(0.03 / 5.0, 1.0 / 5.0, 1.0 / 5.0);
                         gl4duBindMatrix("viewMatrix");
-                        gl4duPushMatrix(); {
+                        gl4duPushMatrix();
+                        {
                                 gl4duLoadIdentityf();
                                 gl4duSendMatrices();
-                        } gl4duPopMatrix();
+                        }
+                        gl4duPopMatrix();
                         gl4duBindMatrix("modelMatrix");
-                } gl4duPopMatrix();
+                }
+                gl4duPopMatrix();
                 gl4duBindMatrix("projectionMatrix");
-        } gl4duPopMatrix();
+        }
+        gl4duPopMatrix();
         gl4duBindMatrix("modelMatrix");
         /* disables cull facing and depth testing */
         glDisable(GL_CULL_FACE);
@@ -439,29 +485,31 @@ static void draw(void) {
         /* draws the compass */
         gl4dgDraw(_plane);
 
-
-
-
-
         gl4duBindMatrix("projectionMatrix");
-        gl4duPushMatrix(); {
+        gl4duPushMatrix();
+        {
                 gl4duLoadIdentityf();
                 gl4duOrthof(-1.0, 1.0, -_wH / (GLfloat)_wW, _wH / (GLfloat)_wW, 0.0, 2.0);
                 gl4duBindMatrix("modelMatrix");
-                gl4duPushMatrix(); {
+                gl4duPushMatrix();
+                {
                         gl4duLoadIdentityf();
                         gl4duTranslatef(0.75, -0.4, 0.0);
                         gl4duRotatef(-_cam.theta * 180.0 / M_PI, 0, 0, 1);
                         gl4duScalef(1.0 / 5.0, 1.0 / 5.0, 1.0);
                         gl4duBindMatrix("viewMatrix");
-                        gl4duPushMatrix(); {
+                        gl4duPushMatrix();
+                        {
                                 gl4duLoadIdentityf();
                                 gl4duSendMatrices();
-                        } gl4duPopMatrix();
+                        }
+                        gl4duPopMatrix();
                         gl4duBindMatrix("modelMatrix");
-                } gl4duPopMatrix();
+                }
+                gl4duPopMatrix();
                 gl4duBindMatrix("projectionMatrix");
-        } gl4duPopMatrix();
+        }
+        gl4duPopMatrix();
         gl4duBindMatrix("modelMatrix");
         /* disables cull facing and depth testing */
         glDisable(GL_CULL_FACE);
@@ -475,10 +523,6 @@ static void draw(void) {
         /* do not draw borders */
         glUniform1i(glGetUniformLocation(_pId, "border"), 0);
 
-
-
-
-
         /* enables cull facing and depth testing */
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
@@ -487,11 +531,11 @@ static void draw(void) {
 /*!\brief function called at exit. Frees used textures and clean-up
  * GL4Dummies.*/
 static void quit(void) {
-        if(_labyrinth)
+        if (_labyrinth)
                 free(_labyrinth);
-        if(_planeTexId)
+        if (_planeTexId)
                 glDeleteTextures(1, &_planeTexId);
-        if(_compassTexId)
+        if (_compassTexId)
                 glDeleteTextures(1, &_compassTexId);
         gl4duClean(GL4DU_ALL);
 }
@@ -499,39 +543,68 @@ static void quit(void) {
 void drawWalls() {
         int i, j;
         GLfloat unit = (_planeScale * 2.0f) / _lab_side;
-        for(j = 0; j < _lab_side; j++) {
-                for(i = 0; i < _lab_side; i++) {
-                        if(_labyrinth[j * _lab_side + i] == -1) {
-                                gl4duPushMatrix(); {
-                                        //gl4duRotatef(180, 1, 0, 0);
-                                        gl4duTranslatef((i * unit) - _planeScale + unit / 2, 0, -((j * unit) - _planeScale + unit / 2));
-                                        gl4duScalef((_planeScale/_lab_side), 4, (_planeScale/_lab_side));
+        for (j = 0; j < _lab_side; j++) {
+                for (i = 0; i < _lab_side; i++) {
+                        if (_labyrinth[j * _lab_side + i] == -1) {
+                                gl4duPushMatrix();
+                                {
+                                        // gl4duRotatef(180, 1, 0, 0);
+                                        gl4duTranslatef((i * unit) - _planeScale + unit / 2, 0,
+                                                        -((j * unit) - _planeScale + unit / 2));
+                                        gl4duScalef((_planeScale / _lab_side), 4, (_planeScale / _lab_side));
                                         gl4duSendMatrices();
-                                } gl4duPopMatrix();
+                                }
+                                gl4duPopMatrix();
                                 gl4dgDraw(_cube);
                         }
                 }
         }
 }
 
-void walls(){
+void walls() {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, _wallTexId);
         drawWalls();
 }
 
-int hit(Cercle player){
+int hit(Cercle player, Point old) {
         int i, j;
         GLfloat unit = (_planeScale * 2.0f) / _lab_side;
-        for(j = 0; j < _lab_side; j++) {
-                for(i = 0; i < _lab_side; i++) {
-                        if(_labyrinth[j * _lab_side + i] == -1) {
+        for (j = 0; j < _lab_side; j++) {
+                for (i = 0; i < _lab_side; i++) {
+                        if (_labyrinth[j * _lab_side + i] == -1) {
                                 AABB wall;
                                 wall.x = ((i * unit) - _planeScale);
                                 wall.y = -((j * unit) - _planeScale) - unit;
                                 wall.w = unit;
                                 wall.h = unit;
-                                if(CollisionCercleAABB(player, wall) == 1) {
+                                if (CollisionCercleAABB(player, wall) == 1) {
+                                        // return 1;
+
+                                        /*  int k;
+                                           float *n1, *n2;
+                                           float orDir[2] = { player.x - fut.x, player.y - fut.y };
+                                           for (k = 0; k < 4; k++) {
+                                                  n1 = vec[k];
+                                                  if (k + 1 < 4) {
+                                                          n2 = vec[0];
+                                                  } else {
+                                                          n2 = vec[k + 1];
+                                                  }
+                                                  if ((orDir[1] * n1[0] - orDir[0] * n1[1]) *
+                                                      (orDir[1] * n2[0] - orDir[0] * n2[1]) <
+                                                      0) {*/
+                                        /*  Point p;
+                                           p.x = player.x +1;
+                                           p.y = old.y;
+                                           if(CollisionAABBSeg(wall, old, p) == 0) {
+                                                  return 2;
+                                           }
+                                           p.x = old.x;
+                                           p.y = player.y +1;
+                                           if(CollisionAABBSeg(wall, old, p) == 0) {
+                                                  return 3;
+                                           }*/
                                         return 1;
                                 }
                         }
