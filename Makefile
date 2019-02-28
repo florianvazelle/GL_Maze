@@ -21,8 +21,8 @@ LDFLAGS = -lm -lSDL2_image
 PROGNAME = sample3d_01
 VERSION = 1.7.1
 distdir = $(PROGNAME)-$(VERSION)
-HEADERS =
-SOURCES = window.c makeLabyrinth.c
+HEADERS = collision_toolbox.h
+SOURCES = window.c makeLabyrinth.c collision_toolbox.c
 OBJ = $(SOURCES:.c=.o)
 DOXYFILE = documentation/Doxyfile
 EXTRAFILES = COPYING $(wildcard shaders/*.?s images/*.png)

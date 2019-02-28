@@ -9,6 +9,21 @@
 #include <GL4D/gl4dp.h>
 #include <GL4D/gl4duw_SDL2.h>
 #include <SDL_image.h>
+#include "collision_toolbox.h"
+
+struct _Cercle
+{
+        GLfloat x,y;
+        GLfloat rayon;
+};
+
+struct _AABB
+{
+        GLfloat x;
+        GLfloat y;
+        GLfloat w;
+        GLfloat h;
+};
 
 static void quit(void);
 static void initGL(void);
@@ -19,7 +34,9 @@ static void keydown(int keycode);
 static void keyup(int keycode);
 static void pmotion(int x, int y);
 static void draw(void);
+
 static void walls(void);
+int hit(Cercle);
 
 /* from makeLabyrinth.c */
 extern unsigned int * labyrinth(int w, int h);
@@ -221,6 +238,8 @@ static void updatePosition(void) {
  * direction, orientation and time (dt = delta-time)
  */
 static void idle(void) {
+        Cercle player;
+
         double dt, dtheta = M_PI, step = 30.0;
         static double t0 = 0, t;
         dt = ((t = gl4dGetElapsedTime()) - t0) / 1000.0;
@@ -229,13 +248,22 @@ static void idle(void) {
                 _cam.theta += dt * dtheta;
         if(_keys[KRIGHT])
                 _cam.theta -= dt * dtheta;
+
+        player.x = _cam.x;
+        player.y = _cam.z;
+        player.rayon = 1.5f;
         if(_keys[KUP]) {
-                _cam.x += -dt * step * sin(_cam.theta);
-                _cam.z += -dt * step * cos(_cam.theta);
+                player.x += -dt * step * sin(_cam.theta);
+                player.y += -dt * step * cos(_cam.theta);
         }
         if(_keys[KDOWN]) {
-                _cam.x += dt * step * sin(_cam.theta);
-                _cam.z += dt * step * cos(_cam.theta);
+                player.x += dt * step * sin(_cam.theta);
+                player.y += dt * step * cos(_cam.theta);
+        }
+
+        if(hit(player) == 0) {
+                _cam.x = player.x;
+                _cam.z = player.y;
         }
         updatePosition();
 }
@@ -475,8 +503,8 @@ void drawWalls() {
                 for(i = 0; i < _lab_side; i++) {
                         if(_labyrinth[j * _lab_side + i] == -1) {
                                 gl4duPushMatrix(); {
-                                        gl4duRotatef(180, 1, 0, 0);
-                                        gl4duTranslatef((i * unit) - _planeScale + unit / 2, 0, (j * unit) - _planeScale + unit / 2);
+                                        //gl4duRotatef(180, 1, 0, 0);
+                                        gl4duTranslatef((i * unit) - _planeScale + unit / 2, 0, -((j * unit) - _planeScale + unit / 2));
                                         gl4duScalef((_planeScale/_lab_side), 4, (_planeScale/_lab_side));
                                         gl4duSendMatrices();
                                 } gl4duPopMatrix();
@@ -490,4 +518,24 @@ void walls(){
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, _wallTexId);
         drawWalls();
+}
+
+int hit(Cercle player){
+        int i, j;
+        GLfloat unit = (_planeScale * 2.0f) / _lab_side;
+        for(j = 0; j < _lab_side; j++) {
+                for(i = 0; i < _lab_side; i++) {
+                        if(_labyrinth[j * _lab_side + i] == -1) {
+                                AABB wall;
+                                wall.x = ((i * unit) - _planeScale);
+                                wall.y = -((j * unit) - _planeScale) - unit;
+                                wall.w = unit;
+                                wall.h = unit;
+                                if(CollisionCercleAABB(player, wall) == 1) {
+                                        return 1;
+                                }
+                        }
+                }
+        }
+        return 0;
 }
