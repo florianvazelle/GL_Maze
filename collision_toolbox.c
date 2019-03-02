@@ -98,7 +98,7 @@ int CollisionDroiteSeg(Point A, Point B, Point O, Point P) {
 int CollisionSegSeg(Point A, Point B, Point O, Point P) {
         if (CollisionDroiteSeg(A, B, O, P) == 0)
                 return 0;  // inutile d'aller plus loin si le segment [OP] ne touche pas la
-                          // droite (AB)
+                           // droite (AB)
         Vecteur AB, OP;
         AB.x = B.x - A.x;
         AB.y = B.y - A.y;
@@ -132,4 +132,86 @@ int CollisionAABBSeg(AABB box, Point A, Point B) {
                 return 1;
         }
         return 0;
+}
+
+int CollisionDroite(Point A,Point B,Cercle C)
+{
+        Vecteur u;
+        u.x = B.x - A.x;
+        u.y = B.y - A.y;
+        Vecteur AC;
+        AC.x = C.x - A.x;
+        AC.y = C.y - A.y;
+        GLfloat numerateur = u.x*AC.y - u.y*AC.x; // norme du vecteur v
+        if (numerateur <0)
+                numerateur = -numerateur;  // valeur absolue ; si c'est négatif, on prend l'opposé.
+        GLfloat denominateur = sqrt(u.x*u.x + u.y*u.y); // norme de u
+        GLfloat CI = numerateur / denominateur;
+        if (CI<C.rayon)
+                return 1;
+        else
+                return 0;
+}
+
+int CollisionSegment(Point A, Point B, Cercle C)
+{
+        if (CollisionDroite(A,B,C) == 0)
+                return 0;  // si on ne touche pas la droite, on ne touchera jamais le segment
+        Vecteur AB,AC,BC;
+        AB.x = B.x - A.x;
+        AB.y = B.y - A.y;
+        AC.x = C.x - A.x;
+        AC.y = C.y - A.y;
+        BC.x = C.x - B.x;
+        BC.y = C.y - B.y;
+        GLfloat pscal1 = AB.x*AC.x + AB.y*AC.y; // produit scalaire
+        GLfloat pscal2 = (-AB.x)*BC.x + (-AB.y)*BC.y; // produit scalaire
+        if (pscal1>=0 && pscal2>=0)
+                return 1;  // I entre A et B, ok.
+        // dernière possibilité, A ou B dans le cercle
+        if (CollisionPointCercle(A.x, A.y,C))
+                return 1;
+        if (CollisionPointCercle(B.x, B.y,C))
+                return 1;
+        return 0;
+}
+
+Point ProjectionI(Point A,Point B,Point C)
+{
+        Vecteur u,AC;
+        u.x = B.x - A.x;
+        u.y = B.y - A.y;
+        AC.x = C.x - A.x;
+        AC.y = C.y - A.y;
+        GLfloat ti = (u.x*AC.x + u.y*AC.y)/(u.x*u.x + u.y*u.y);
+        Point I;
+        I.x = A.x + ti*u.x;
+        I.y = A.y + ti*u.y;
+        return I;
+}
+
+Vecteur GetNormale(Point A, Point B, Point C)
+{
+        Vecteur AC,u,N;
+        u.x = B.x - A.x;
+        u.y = B.y - A.y;
+        AC.x = C.x - A.x;
+        AC.y = C.y - A.y;
+        GLfloat parenthesis = u.x*AC.y-u.y*AC.x; // calcul une fois pour les deux
+        N.x = -u.y*(parenthesis);
+        N.y = u.x*(parenthesis);
+        // normalisons
+        GLfloat norme = sqrt(N.x*N.x + N.y*N.y);
+        N.x/=norme;
+        N.y/=norme;
+        return N;
+}
+
+Vecteur CalculerVecteurV2(Vecteur v, Vecteur N)
+{
+        Vecteur v2;
+        GLfloat pscal = (v.x*N.x +  v.y*N.y);
+        v2.x = v.x -2*pscal*N.x;
+        v2.y = v.y -2*pscal*N.y;
+        return v2;
 }
