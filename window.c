@@ -104,9 +104,6 @@ float vec[4][2] = {
 int nb_ball = 0;
 GLfloat *balls;
 
-int nb_ball_p = 0;
-GLfloat *balls_p;
-
 /*!\brief creates the window, initializes OpenGL parameters,
  * initializes data and maps callback functions */
 int main(int argc, char **argv) {
@@ -124,6 +121,18 @@ int main(int argc, char **argv) {
         gl4duwIdleFunc(idle);
         gl4duwMainLoop();
         return 0;
+}
+
+void show_info_balle(){
+        printf("Il reste %d balles.\n", nb_ball/2);
+        /*int j, k = 0;
+           for(j = 0; j < nb_ball; j += 2) {
+                printf("Balle n%d ", ++k);
+                printf("\t(%.2f, %.2f)\n", balls[j], balls[j+ 1]);
+           }*/
+        if(nb_ball == 0) {
+                printf("Bravo!\n");
+        }
 }
 
 /*!\brief initializes OpenGL parameters :
@@ -153,17 +162,17 @@ void initBalls(){
         for (j = 0; j < _lab_side; j++) {
                 for (i = 0; i < _lab_side; i++) {
                         if (_labyrinth[j * _lab_side + i] != -1) {
-                                //srand((unsigned)time(0));
-                                if(rand() % 2 > 0.5f) {
+                                srand(time(NULL) + i + j);
+                                if(rand() % 10 > 7) {
                                         nb_ball += 2;
-                                        balls = realloc(balls, nb_ball * sizeof(GLfloat));
+                                        balls = realloc(balls, nb_ball * sizeof(float));
                                         balls[nb_ball - 2] = (i * unit) - _planeScale + unit/2;
                                         balls[nb_ball - 1] = -((j * unit) - _planeScale + unit/2);
                                 }
                         }
                 }
         }
-        printf("%d\n", nb_ball);
+        show_info_balle();
 }
 
 /*!\brief initializes data :
@@ -329,9 +338,24 @@ static void idle(void) {
         int res_col = hit_mur(player, old);
         hit_ball(player);
         if (res_col == 0) {
-
                 _cam.x = player.x;
                 _cam.z = player.y;
+        } else if(res_col == 2) {
+                int res_s = (s != 0) ? (s > 0) ? 1 : -1 : 0;
+                if (_keys[KUP]) {
+                        _cam.x  += -dt * step * res_s;
+                }
+                if (_keys[KDOWN]) {
+                        _cam.x  += dt * step * res_s;
+                }
+        } else if(res_col == 3) {
+                int res_c = (c != 0) ? (c > 0) ? 1 : -1 : 0;
+                if (_keys[KUP]) {
+                        _cam.z += -dt * step * res_c;
+                }
+                if (_keys[KDOWN]) {
+                        _cam.z += dt * step * res_c;
+                }
         }
 
         updatePosition();
@@ -602,28 +626,19 @@ void drawWalls() {
 }
 
 void drawBalls(){
-        int i, j, res;
+        int i;
         GLfloat xi, zi;
-        for(i = 0; i < nb_ball / 2; i += 2) {
-                res = 1;
+        for(i = 0; i < nb_ball; i += 2) {
                 xi = balls[i];
                 zi = balls[i + 1];
-                for(j = 0; j < nb_ball_p/2; j += 2) {
-                        if(xi == balls_p[j] && zi == balls_p[j + 1]) {
-                                res = 0;
-                                break;
-                        }
+                gl4duPushMatrix();
+                {
+                        gl4duTranslatef(xi, 2, zi);
+                        gl4duScalef((_planeScale / _lab_side) / 4, 1, (_planeScale / _lab_side) / 4);
+                        gl4duSendMatrices();
                 }
-                if(res == 1) {
-                        gl4duPushMatrix();
-                        {
-                                gl4duTranslatef(xi, 2, zi);
-                                gl4duScalef((_planeScale / _lab_side) / 4, 1, (_planeScale / _lab_side) / 4);
-                                gl4duSendMatrices();
-                        }
-                        gl4duPopMatrix();
-                        gl4dgDraw(_sphere);
-                }
+                gl4duPopMatrix();
+                gl4dgDraw(_sphere);
         }
 }
 
@@ -636,43 +651,29 @@ void walls() {
         drawBalls();
 }
 
-int ball_passe(GLfloat xi, GLfloat zi){
-        int j;
-        for(j = 0; j < nb_ball_p/2; j += 2) {
-                //printf("x : %.6f----------z : %.6f\n", balls_p[j], balls_p[j + 1]);
-                if(xi == balls_p[j] && zi == balls_p[j + 1]) {
-                        return 1;
-                }
-        }
-        return 0;
+void remove_ball(int idx){
+        balls[idx] = balls[nb_ball - 2];
+        balls[idx + 1] = balls[nb_ball - 1];
+        nb_ball -= 2;
 }
+
 
 void hit_ball(Cercle player){
         int i;
         GLfloat xi, zi;
 
-        Cercle p;
-        p.x = player.x;
-        p.y = player.y;
-        p.rayon = 1.0f;
-        //printf("hit_ball\n");
-        for(i = 0; i < nb_ball/2; i += 2) {
+        for(i = 0; i < nb_ball; i += 2) {
                 xi = balls[i];
                 zi = balls[i + 1];
-                if(ball_passe(xi, zi) == 0) {
-                        if(CollisionPointCercle(xi, zi, player) == 1) {
-                                printf("x : %.6f--------col--------z : %.6f\n", xi, zi);
-                                //printf("res : %d\n", nb_ball_p);
-                                nb_ball_p += 2;
-                                balls_p = realloc(balls_p, nb_ball_p * sizeof(GLfloat));
-                                balls_p[nb_ball_p - 2] = xi;
-                                balls_p[nb_ball_p - 1] = zi;
-                        }
+                if(CollisionPointCercle(xi, zi, player) == 1) {
+                        //printf("Vous avez eu la balle n%d\n", (i + 2)/2);
+                        remove_ball(i);
+                        show_info_balle();
                 }
         }
 }
 
-int hit_mur(Cercle player, Point old) {
+int hit(Cercle player, Cercle p){
         GLfloat xf, zf;
         int xi, zi, i, j;
 
@@ -698,12 +699,38 @@ int hit_mur(Cercle player, Point old) {
                                 wall.y = -((j * unit) - _planeScale) - unit;
                                 wall.w = unit;
                                 wall.h = unit;
-                                if(CollisionCercleAABB(player, wall) == 1) {
+
+                                if(CollisionCercleAABB(p, wall) == 1) {
                                         return 1;
                                 }
                         }
                 }
         }
+        return 0;
+}
 
+int hit_mur(Cercle player, Point old) {
+
+        if(hit(player, player) == 1) {
+                Cercle p;
+                p.x = player.x;
+                p.y = old.y;
+                p.rayon = player.rayon;
+
+                int col1 = hit(player, p);
+
+                p.x = old.x;
+                p.y = player.y;
+                p.rayon = player.rayon;
+
+                int col2 = hit(player, p);
+                if(col1 == 1 && col2 == 1) {
+                        return 1;
+                } else if(col1 == 1 && col2 == 0) {
+                        return 3;
+                } else if(col1 == 0 && col2 == 1) {
+                        return 2;
+                }
+        }
         return 0;
 }
