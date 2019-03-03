@@ -10,7 +10,6 @@
 #include <GL4D/gl4dp.h>
 #include <GL4D/gl4duw_SDL2.h>
 #include <SDL_image.h>
-#include <math.h>
 #include <time.h>
 
 struct _Cercle {
@@ -25,11 +24,6 @@ struct _Point {
         GLfloat x, y;
 };
 
-typedef struct {
-        Point a, b;
-} Seg;
-
-
 static void quit(void);
 static void initGL(void);
 static void initData(void);
@@ -40,7 +34,7 @@ static void keyup(int keycode);
 static void pmotion(int x, int y);
 static void draw(void);
 
-static void walls(void);
+static void my_draw(void);
 int hit_mur(Cercle, Point);
 void hit_ball(Cercle);
 
@@ -76,7 +70,6 @@ static GLuint _wallTexId = 0;
 static GLuint _ballTexId = 0;
 static GLuint _sphere = 0;
 
-
 /*!\brief enum that index keyboard mapping for direction commands */
 enum kyes_t { KLEFT = 0, KRIGHT, KUP, KDOWN };
 
@@ -93,13 +86,6 @@ struct cam_t {
 
 /*!\brief the used camera */
 static cam_t _cam = {0, 0, 0};
-
-float vec[4][2] = {
-        {0.0f, 1.0f}, // up
-        {1.0f, 0.0f}, // right
-        {0.0f, -1.0f}, // down
-        {-1.0f, 0.0f} // left
-};
 
 int nb_ball = 0;
 GLfloat *balls;
@@ -123,14 +109,14 @@ int main(int argc, char **argv) {
         return 0;
 }
 
-void show_info_balle(){
-        printf("Il reste %d balles.\n", nb_ball/2);
+void show_info_balle() {
+        printf("Il reste %d balles.\n", nb_ball / 2);
         /*int j, k = 0;
            for(j = 0; j < nb_ball; j += 2) {
                 printf("Balle n%d ", ++k);
                 printf("\t(%.2f, %.2f)\n", balls[j], balls[j+ 1]);
            }*/
-        if(nb_ball == 0) {
+        if (nb_ball == 0) {
                 printf("Bravo!\n");
         }
 }
@@ -156,18 +142,18 @@ static void initGL(void) {
         resize(_wW, _wH);
 }
 
-void initBalls(){
+void initBalls() {
         int i, j;
         GLfloat unit = (_planeScale * 2.0f) / _lab_side;
         for (j = 0; j < _lab_side; j++) {
                 for (i = 0; i < _lab_side; i++) {
                         if (_labyrinth[j * _lab_side + i] != -1) {
                                 srand(time(NULL) + i + j);
-                                if(rand() % 10 > 7) {
+                                if (rand() % 10 > 7) {
                                         nb_ball += 2;
                                         balls = realloc(balls, nb_ball * sizeof(float));
-                                        balls[nb_ball - 2] = (i * unit) - _planeScale + unit/2;
-                                        balls[nb_ball - 1] = -((j * unit) - _planeScale + unit/2);
+                                        balls[nb_ball - 2] = (i * unit) - _planeScale + unit / 2;
+                                        balls[nb_ball - 1] = -((j * unit) - _planeScale + unit / 2);
                                 }
                         }
                 }
@@ -182,7 +168,7 @@ void initBalls(){
 static void initData(void) {
         /* a red-white texture used to draw a compass */
         GLuint northsouth[] = {(255 << 24) + 255, -1};
-        GLuint ball_color[2] = { RGB(255, 255, 0), RGB(255, 255, 0) };
+        GLuint ball_color[1] = {RGB(255, 255, 0)};
         /* generates a quad using GL4Dummies */
         _plane = gl4dgGenQuadf();
         /* generates a cube using GL4Dummies */
@@ -237,7 +223,7 @@ static void initData(void) {
         glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 2, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 1, 1, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                      ball_color);
 
         glBindTexture(GL_TEXTURE_2D, 0);
@@ -340,15 +326,15 @@ static void idle(void) {
         if (res_col == 0) {
                 _cam.x = player.x;
                 _cam.z = player.y;
-        } else if(res_col == 2) {
+        } else if (res_col == 2) {
                 int res_s = (s != 0) ? (s > 0) ? 1 : -1 : 0;
                 if (_keys[KUP]) {
-                        _cam.x  += -dt * step * res_s;
+                        _cam.x += -dt * step * res_s;
                 }
                 if (_keys[KDOWN]) {
-                        _cam.x  += dt * step * res_s;
+                        _cam.x += dt * step * res_s;
                 }
-        } else if(res_col == 3) {
+        } else if (res_col == 3) {
                 int res_c = (c != 0) ? (c > 0) ? 1 : -1 : 0;
                 if (_keys[KUP]) {
                         _cam.z += -dt * step * res_c;
@@ -504,7 +490,7 @@ static void draw(void) {
         /* draws the plane */
         gl4dgDraw(_plane);
 
-        walls();
+        my_draw();
 
         /* the compass should be drawn in an orthographic projection, thus
          * we should bind the projection matrix; save it; load identity;
@@ -591,6 +577,8 @@ static void draw(void) {
         glEnable(GL_CULL_FACE);
 }
 
+/*!\brief function called at exit. Frees used textures and clean-up
+ * GL4Dummies.*/
 static void quit(void) {
         if (_labyrinth)
                 free(_labyrinth);
@@ -613,8 +601,8 @@ void drawWalls() {
                         if (_labyrinth[j * _lab_side + i] == -1) {
                                 gl4duPushMatrix();
                                 {
-                                        gl4duTranslatef((i * unit) - _planeScale + unit/2, 0,
-                                                        -((j * unit) - _planeScale + unit/2));
+                                        gl4duTranslatef((i * unit) - _planeScale + unit / 2, 0,
+                                                        -((j * unit) - _planeScale + unit / 2));
                                         gl4duScalef((_planeScale / _lab_side), 4, (_planeScale / _lab_side));
                                         gl4duSendMatrices();
                                 }
@@ -625,16 +613,17 @@ void drawWalls() {
         }
 }
 
-void drawBalls(){
+void drawBalls() {
         int i;
         GLfloat xi, zi;
-        for(i = 0; i < nb_ball; i += 2) {
+        for (i = 0; i < nb_ball; i += 2) {
                 xi = balls[i];
                 zi = balls[i + 1];
                 gl4duPushMatrix();
                 {
                         gl4duTranslatef(xi, 2, zi);
-                        gl4duScalef((_planeScale / _lab_side) / 4, 1, (_planeScale / _lab_side) / 4);
+                        gl4duScalef((_planeScale / _lab_side) / 4, 1,
+                                    (_planeScale / _lab_side) / 4);
                         gl4duSendMatrices();
                 }
                 gl4duPopMatrix();
@@ -642,7 +631,7 @@ void drawBalls(){
         }
 }
 
-void walls() {
+void my_draw() {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, _wallTexId);
         drawWalls();
@@ -651,29 +640,28 @@ void walls() {
         drawBalls();
 }
 
-void remove_ball(int idx){
+void remove_ball(int idx) {
         balls[idx] = balls[nb_ball - 2];
         balls[idx + 1] = balls[nb_ball - 1];
         nb_ball -= 2;
 }
 
-
-void hit_ball(Cercle player){
+void hit_ball(Cercle player) {
         int i;
         GLfloat xi, zi;
 
-        for(i = 0; i < nb_ball; i += 2) {
+        for (i = 0; i < nb_ball; i += 2) {
                 xi = balls[i];
                 zi = balls[i + 1];
-                if(CollisionPointCercle(xi, zi, player) == 1) {
-                        //printf("Vous avez eu la balle n%d\n", (i + 2)/2);
+                if (CollisionPointCercle(xi, zi, player) == 1) {
+                        // printf("Vous avez eu la balle n%d\n", (i + 2)/2);
                         remove_ball(i);
                         show_info_balle();
                 }
         }
 }
 
-int hit(Cercle player, Cercle p){
+int hit(Cercle player, Cercle p) {
         GLfloat xf, zf;
         int xi, zi, i, j;
 
@@ -700,7 +688,7 @@ int hit(Cercle player, Cercle p){
                                 wall.w = unit;
                                 wall.h = unit;
 
-                                if(CollisionCercleAABB(p, wall) == 1) {
+                                if (CollisionCercleAABB(p, wall) == 1) {
                                         return 1;
                                 }
                         }
@@ -711,7 +699,7 @@ int hit(Cercle player, Cercle p){
 
 int hit_mur(Cercle player, Point old) {
 
-        if(hit(player, player) == 1) {
+        if (hit(player, player) == 1) {
                 Cercle p;
                 p.x = player.x;
                 p.y = old.y;
@@ -724,11 +712,11 @@ int hit_mur(Cercle player, Point old) {
                 p.rayon = player.rayon;
 
                 int col2 = hit(player, p);
-                if(col1 == 1 && col2 == 1) {
+                if (col1 == 1 && col2 == 1) {
                         return 1;
-                } else if(col1 == 1 && col2 == 0) {
+                } else if (col1 == 1 && col2 == 0) {
                         return 3;
-                } else if(col1 == 0 && col2 == 1) {
+                } else if (col1 == 0 && col2 == 1) {
                         return 2;
                 }
         }
