@@ -41,7 +41,8 @@ static void pmotion(int x, int y);
 static void draw(void);
 
 static void walls(void);
-int hit2(Cercle, Point);
+int hit_mur(Cercle, Point);
+void hit_ball(Cercle);
 
 /* from makeLabyrinth.c */
 extern unsigned int *labyrinth(int w, int h);
@@ -152,7 +153,7 @@ void initBalls(){
         for (j = 0; j < _lab_side; j++) {
                 for (i = 0; i < _lab_side; i++) {
                         if (_labyrinth[j * _lab_side + i] != -1) {
-                                srand((unsigned)time(0));
+                                //srand((unsigned)time(0));
                                 if(rand() % 2 > 0.5f) {
                                         nb_ball += 2;
                                         balls = realloc(balls, nb_ball * sizeof(GLfloat));
@@ -325,24 +326,10 @@ static void idle(void) {
                 player.y += dt * step * c;
         }
 
-        int res_col = hit2(player, old);
-        if (res_col == 2 || res_col == 4) {
-                int res_s = (s == 0) ? 0 : (s > 0) ? 1 : -1;
-                if (_keys[KUP]) {
-                        _cam.x += -dt * step * res_s;
-                }
-                if (_keys[KDOWN]) {
-                        _cam.x += dt * step * res_s;
-                }
-        } else if (res_col == 3 || res_col == 6) {
-                int res_c = (c == 0) ? 0 : (c > 0) ? 1 : -1;
-                if (_keys[KUP]) {
-                        _cam.z += -dt * step * res_c;
-                }
-                if (_keys[KDOWN]) {
-                        _cam.z += dt * step * res_c;
-                }
-        } else if (res_col == 0) {
+        int res_col = hit_mur(player, old);
+        hit_ball(player);
+        if (res_col == 0) {
+
                 _cam.x = player.x;
                 _cam.z = player.y;
         }
@@ -580,8 +567,6 @@ static void draw(void) {
         glEnable(GL_CULL_FACE);
 }
 
-/*!\brief function called at exit. Frees used textures and clean-up
- * GL4Dummies.*/
 static void quit(void) {
         if (_labyrinth)
                 free(_labyrinth);
@@ -589,8 +574,13 @@ static void quit(void) {
                 glDeleteTextures(1, &_planeTexId);
         if (_compassTexId)
                 glDeleteTextures(1, &_compassTexId);
+        if (_wallTexId)
+                glDeleteTextures(1, &_wallTexId);
+        if (_ballTexId)
+                glDeleteTextures(1, &_ballTexId);
         gl4duClean(GL4DU_ALL);
 }
+
 void drawWalls() {
         int i, j;
         GLfloat unit = (_planeScale * 2.0f) / _lab_side;
@@ -606,27 +596,34 @@ void drawWalls() {
                                 }
                                 gl4duPopMatrix();
                                 gl4dgDraw(_cube);
-
                         }
-
                 }
         }
 }
 
 void drawBalls(){
-        int i, j, k;
-        GLfloat unit = (_planeScale * 2.0f) / _lab_side;
-        for(k = 0; k < nb_ball / 2; k += 2) {
-                i = balls[k];
-                j = balls[k + 1];
-                gl4duPushMatrix();
-                {
-                        gl4duTranslatef(i, 2, j);
-                        gl4duScalef((_planeScale / _lab_side) / 4, 1, (_planeScale / _lab_side) / 4);
-                        gl4duSendMatrices();
+        int i, j, res;
+        GLfloat xi, zi;
+        for(i = 0; i < nb_ball / 2; i += 2) {
+                res = 1;
+                xi = balls[i];
+                zi = balls[i + 1];
+                for(j = 0; j < nb_ball_p/2; j += 2) {
+                        if(xi == balls_p[j] && zi == balls_p[j + 1]) {
+                                res = 0;
+                                break;
+                        }
                 }
-                gl4duPopMatrix();
-                gl4dgDraw(_sphere);
+                if(res == 1) {
+                        gl4duPushMatrix();
+                        {
+                                gl4duTranslatef(xi, 2, zi);
+                                gl4duScalef((_planeScale / _lab_side) / 4, 1, (_planeScale / _lab_side) / 4);
+                                gl4duSendMatrices();
+                        }
+                        gl4duPopMatrix();
+                        gl4dgDraw(_sphere);
+                }
         }
 }
 
@@ -639,161 +636,45 @@ void walls() {
         drawBalls();
 }
 
-int hit(Cercle player, Point old) {
-        int i, j;
-        GLfloat unit = (_planeScale * 2.0f) / _lab_side;
-        for (j = 0; j < _lab_side; j++) {
-                for (i = 0; i < _lab_side; i++) {
-                        if (_labyrinth[j * _lab_side + i] == -1) {
-                                AABB wall;
-                                wall.x = ((i * unit) - _planeScale);
-                                wall.y = -((j * unit) - _planeScale) - unit;
-                                wall.w = unit;
-                                wall.h = unit;
-                                if (CollisionCercleAABB(player, wall) == 1) {
-                                        Point p;
-                                        p.x = player.x;
-                                        p.y = old.y;
-                                        if(CollisionAABBSeg(wall, old, p) == 0) {
-                                                return 2;
-                                        }
-                                        p.x = old.x;
-                                        p.y = player.y;
-                                        if(CollisionAABBSeg(wall, old, p) == 0) {
-                                                return 3;
-                                        }
-                                        else return 1;
-                                }
-                        }
+int ball_passe(GLfloat xi, GLfloat zi){
+        int j;
+        for(j = 0; j < nb_ball_p/2; j += 2) {
+                //printf("x : %.6f----------z : %.6f\n", balls_p[j], balls_p[j + 1]);
+                if(xi == balls_p[j] && zi == balls_p[j + 1]) {
+                        return 1;
                 }
         }
         return 0;
 }
 
-GLfloat my_if(GLfloat x){
-        return (x != 0) ? (x > 0) ? x + 1 : x - 1 : x;
-}
-
-void determineSeg(AABB wall, int xi, int zi, int i, int j, Point *A, Point* B){
-        if(zi - j == -1) {
-                if(xi - i == 0) {
-                        printf("here1\n");
-                        A->x = wall.x;
-                        A->y = wall.y + wall.h;
-                        B->x = wall.x + wall.w;
-                        B->y = wall.y + wall.h;
-                }
-        } else if(zi - j == 0) {
-                if(xi - i == -1) {
-                        printf("here2\n");
-                        A->x = wall.x;
-                        A->y = wall.y;
-                        B->x = wall.x;
-                        B->y = wall.y + wall.h;
-                } else if(xi - i == 1) {
-                        printf("here3\n");
-                        A->x = wall.x + wall.w;
-                        A->y = wall.y;
-                        B->x = wall.x + wall.w;
-                        B->y = wall.y + wall.h;
-                }
-        } else if(zi - j == 1) {
-                if(xi - i == 0) {
-                        printf("here4\n");
-                        A->x = wall.x;
-                        A->y = wall.y;
-                        B->x = wall.x + wall.w;
-                        B->y = wall.y;
-                }
-        }
-}
-
-
-int EqualsSeg(Point A, Point B, Point C, Point D){
-        if(floor(A.x) == floor(C.x) && floor(A.y) == floor(C.y) && floor(B.x) == floor(D.x) && floor(B.y == D.y)) {
-                return 1;
-        }
-        if(floor(A.x) == floor(D.x) && floor(A.y) == floor(D.y) && floor(B.x )== floor(C.x) && floor(B.y == C.y)) {
-                return 1;
-        }
-        return 0;
-}
-
-int determineSide(Point old, GLfloat unit, Point a, Point b){
-        Point top;
-        top.x = old.x;
-        top.y = old.y;
-        Point left;
-        left.x = old.x;
-        left.y = old.y + unit;
-        Point bottom;
-        bottom.x = old.x + unit;
-        bottom.y = old.y + unit;
-        Point right;
-        right.x = old.x + unit;
-        right.y = old.y;
-
-        if(EqualsSeg(top, left, a, b) == 1) {
-                return 1;
-        }
-        if(EqualsSeg(left, bottom, a, b) == 1) {
-                return 1;
-        }
-        if(EqualsSeg(bottom, right, a, b) == 1) {
-                return 1;
-        }
-        if(EqualsSeg(right, top, a, b) == 1) {
-                return 1;
-        }
-        return 0;
-}
-
-void remove_ball(int index, GLfloat i, GLfloat j)
-{
-        nb_ball_p += 2;
-        balls_p = realloc(balls_p, nb_ball_p * sizeof(GLfloat));
-        balls_p[nb_ball_p - 2] = i;
-        balls_p[nb_ball_p - 1] = j;
-}
-
-int hit_ball(Cercle player){
-        int i, j, res = 1;
+void hit_ball(Cercle player){
+        int i;
         GLfloat xi, zi;
 
         Cercle p;
         p.x = player.x;
         p.y = player.y;
         p.rayon = 1.0f;
-
+        //printf("hit_ball\n");
         for(i = 0; i < nb_ball/2; i += 2) {
                 xi = balls[i];
                 zi = balls[i + 1];
-                for(j = 0; j < nb_ball_p/2; j += 2) {
-                        if(xi == balls_p[j] && zi == balls_p[j + 1]) {
-                                res = 0;
-                                break;
-                        }
-                }
-                if(res == 1) {
-                        if(CollisionPointCercle(xi, zi, p) == 1) {
-                                printf("--------col--------\n");
-                                remove_ball(i, xi, zi);
-                                nb_ball -= 2;
+                if(ball_passe(xi, zi) == 0) {
+                        if(CollisionPointCercle(xi, zi, player) == 1) {
+                                printf("x : %.6f--------col--------z : %.6f\n", xi, zi);
+                                //printf("res : %d\n", nb_ball_p);
+                                nb_ball_p += 2;
+                                balls_p = realloc(balls_p, nb_ball_p * sizeof(GLfloat));
+                                balls_p[nb_ball_p - 2] = xi;
+                                balls_p[nb_ball_p - 1] = zi;
                         }
                 }
         }
 }
 
-void my_increase(GLfloat** data, int size)
-{
-        *data = realloc(*data, (size + 4) * sizeof(GLfloat));
-}
-
-
-int hit2(Cercle player, Point old) {
-        hit_ball(player);
+int hit_mur(Cercle player, Point old) {
         GLfloat xf, zf;
-        int xi, zi, i, j, res = 0;
+        int xi, zi, i, j;
 
         xf = player.x + _planeScale;
         zf = -player.y + _planeScale;
@@ -809,8 +690,6 @@ int hit2(Cercle player, Point old) {
 
         GLfloat unit = (_planeScale * 2.0f) / _lab_side;
 
-        GLfloat *data = NULL;
-        int size = 0;
         for (j = zi - 1; j <= zi + 1; j++) {
                 for (i = xi - 1; i <= xi + 1; i++) {
                         if (_labyrinth[j * _lab_side + i] == -1) {
@@ -819,397 +698,12 @@ int hit2(Cercle player, Point old) {
                                 wall.y = -((j * unit) - _planeScale) - unit;
                                 wall.w = unit;
                                 wall.h = unit;
-                                if(zi - j == -1) {
-                                        if(xi - i == -1) {
-                                                //RIGHT
-                                                if (_labyrinth[j * _lab_side + (i - 1)]!= -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                                //BOTTOM
-                                                if (_labyrinth[(j - 1) * _lab_side + i] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y+ wall.h;
-                                                        data[size + 2] = wall.x+ wall.w;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                        } else if(xi - i == 0) {
-                                                //LEFT
-                                                if (_labyrinth[j * _lab_side + (i + 1)] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x + wall.w;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x + wall.w;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                                //RIGHT
-                                                if (_labyrinth[j * _lab_side + (i - 1)]!= -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                                //BOTTOM
-                                                if (_labyrinth[(j - 1) * _lab_side + i] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y+ wall.h;
-                                                        data[size + 2] = wall.x+ wall.w;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                        } else if(xi - i == 1) {
-                                                //LEFT
-                                                if (_labyrinth[j * _lab_side + (i + 1)] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x + wall.w;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x + wall.w;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                                //BOTTOM
-                                                if (_labyrinth[(j - 1) * _lab_side + i] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y+ wall.h;
-                                                        data[size + 2] = wall.x+ wall.w;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                        }
-                                } else if(zi - j == 0) {
-                                        if(xi - i == -1) {
-                                                //TOP
-                                                if (_labyrinth[(j + 1) * _lab_side + i] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x+ wall.w;
-                                                        data[size + 3] = wall.y;
-                                                        size += 4;
-                                                }
-                                                //RIGHT
-                                                if (_labyrinth[j * _lab_side + (i - 1)]!= -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                                //BOTTOM
-                                                if (_labyrinth[(j - 1) * _lab_side + i] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y+ wall.h;
-                                                        data[size + 2] = wall.x+ wall.w;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                        } else if(xi - i == 1) {
-                                                //TOP
-                                                if (_labyrinth[(j + 1) * _lab_side + i] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x+ wall.w;
-                                                        data[size + 3] = wall.y;
-                                                        size += 4;
-                                                }
-                                                //LEFT
-                                                if (_labyrinth[j * _lab_side + (i + 1)] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x + wall.w;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x + wall.w;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                                //BOTTOM
-                                                if (_labyrinth[(j - 1) * _lab_side + i] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y+ wall.h;
-                                                        data[size + 2] = wall.x+ wall.w;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                        }
-                                } else if(zi - j == 1) {
-                                        if(xi - i == -1) {
-                                                //RIGHT
-                                                if (_labyrinth[j * _lab_side + (i - 1)]!= -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                                //TOP
-                                                if (_labyrinth[(j + 1) * _lab_side + i] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x+ wall.w;
-                                                        data[size + 3] = wall.y;
-                                                        size += 4;
-                                                }
-                                        } else if(xi - i == 0) {
-                                                //LEFT
-                                                if (_labyrinth[j * _lab_side + (i + 1)] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x + wall.w;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x + wall.w;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                                //RIGHT
-                                                if (_labyrinth[j * _lab_side + (i - 1)]!= -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                                //TOP
-                                                if (_labyrinth[(j + 1) * _lab_side + i] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x+ wall.w;
-                                                        data[size + 3] = wall.y;
-                                                        size += 4;
-                                                }
-                                        } else if(xi - i == 1) {
-                                                //LEFT
-                                                if (_labyrinth[j * _lab_side + (i + 1)] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x + wall.w;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x + wall.w;
-                                                        data[size + 3] = wall.y + wall.h;
-                                                        size += 4;
-                                                }
-                                                //TOP
-                                                if (_labyrinth[(j + 1) * _lab_side + i] != -1) {
-                                                        my_increase(&data, size);
-                                                        data[size] = wall.x;
-                                                        data[size + 1] = wall.y;
-                                                        data[size + 2] = wall.x + wall.w;
-                                                        data[size + 3] = wall.y;
-                                                        size += 4;
-                                                }
-                                        }
+                                if(CollisionCercleAABB(player, wall) == 1) {
+                                        return 1;
                                 }
                         }
                 }
         }
-        //printf("size: %d\n", size);
 
-        Point a, b;
-        for(i = 0; i < size; i += 4) {
-                a.x = data[i];
-                a.y = data[i + 1];
-                b.x = data[i + 2];
-                b.y = data[i + 3];
-                if (CollisionSegment(a, b, player) == 1) {
-/*                        Point p;
-
-                        p.x = player.x + 1.0f;
-                        p.y = old.y;
-
-                        int col1 = CollisionSegSeg(old, p, a, b);
-
-                        p.x = player.x - 1.0f;
-                        p.y = old.y;
-
-                        int col2 = CollisionSegSeg(old, p, a, b);
-
-                        p.x = old.x;
-                        p.y = player.y + 1.0f;
-
-                        int col3 = CollisionSegSeg(old, p, a, b);
-
-                        p.x = old.x;
-                        p.y = player.y - 1.0f;
-
-                        int col4 = CollisionSegSeg(old, p, a, b);
-
-                        if(col1 == 0 && col2 == 0) {
-                                return 1;
-                        }
-                        if(col1 == 0 || col2 == 0) {
-                                return 2;
-                        }
-                        if(col3 == 0 || col4 == 0) {
-                                return 3;
-                        }
- */
-//                       return 1;
-                }
-        }
-
-        free(data);
-/*
-        for (j = zi - 1; j <= zi + 1; j++) {
-                for (i = xi - 1; i <= xi + 1; i++) {
-                        if (_labyrinth[j * _lab_side + i] == -1) {
-                                Point a, b;
-                                AABB wall;
-                                wall.x = ((i * unit) - _planeScale);
-                                wall.y = -((j * unit) - _planeScale) - unit;
-                                wall.w = unit;
-                                wall.h = unit;
-                                //if(CollisionCercleAABB(player, wall) == 1) {
-
-                                //return 1;
-                                  if(!((zi - j == -1 && xi - i == -1) || (zi - j == -1 && xi - i == 1) ||
-                                       (zi - j == 1 && xi - i == -1) || (zi - j == 1 && xi - i == 1))) {
-                                          determineSeg(wall, xi, zi, i, j, &a, &b);
-                                          if (CollisionSegment(a, b, player) == 1) {
-                                                  Point p;
-
-                                                  p.x = player.x;
-                                                  p.y = player.y;
-                                                  //if(determineSide(p, unit, a, b) == 1) {
-
-                                                  p.x = player.x;
-                                                  p.y = old.y;
-
-                                                  if(CollisionDroiteSeg(old, p, a, b) == 0) {
-                                                          res += 2;
-                                                  }
-
-                                                  p.x = old.x;
-                                                  p.y = player.y;
-
-                                                  if(CollisionDroiteSeg(old, p, a, b) == 0) {
-                                                          res += 3;
-                                                  }
-                                          }
-                                   }
-        //  }
-   }
-   }
-   } */
-        //printf("%d\n", res);
-        return res;
-}
-
-//barre d'en haut
-int getTop(GLfloat* data, int size, AABB wall, int i, int j){
-        if (_labyrinth[(j + 1) * _lab_side + i] != -1) {
-                my_increase(&data, size);
-                data[size] = wall.x;
-                data[size + 1] = wall.y;
-                data[size + 2] = wall.x+ wall.w;
-                data[size + 3] = wall.y;
-                return 4;
-        }
         return 0;
-}
-
-//barre d'en gauche
-int getRight(GLfloat* data, int size, AABB wall, int i, int j){
-        if (_labyrinth[j * _lab_side + (i - 1)]!= -1) {
-                my_increase(&data, size);
-                data[size] = wall.x;
-                data[size + 1] = wall.y;
-                data[size + 2] = wall.x;
-                data[size + 3] = wall.y + wall.h;
-                return 4;
-        }
-        return 0;
-}
-
-//barre d'en droite
-int getLeft(GLfloat* data, int size, AABB wall, int i, int j){
-        if (_labyrinth[j * _lab_side + (i + 1)] != -1) {
-                my_increase(&data, size);
-                data[size] = wall.x + wall.w;
-                data[size + 1] = wall.y;
-                data[size + 2] = wall.x + wall.w;
-                data[size + 3] = wall.y + wall.h;
-                return 4;
-        }
-        return 0;
-}
-
-//barre d'en bas
-int getBottom(GLfloat* data, int size, AABB wall, int i, int j){
-        if (_labyrinth[(j - 1) * _lab_side + i] != -1) {
-                my_increase(&data, size);
-                data[size] = wall.x;
-                data[size + 1] = wall.y+ wall.h;
-                data[size + 2] = wall.x+ wall.w;
-                data[size + 3] = wall.y + wall.h;
-                return 4;
-        }
-        return 0;
-}
-
-int getWall(AABB wall, int xi, int zi, GLfloat* data, int size){
-        int i, j;
-        GLfloat unit = (_planeScale * 2.0f) / _lab_side;
-
-        for (j = zi - 1; j <= zi + 1; j++) {
-                for (i = xi - 1; i <= xi + 1; i++) {
-                        if (_labyrinth[j * _lab_side + i] == -1) {
-                                AABB wall;
-                                wall.x = ((i * unit) - _planeScale);
-                                wall.y = -((j * unit) - _planeScale) - unit;
-                                wall.w = unit;
-                                wall.h = unit;
-                                if(zi - j == -1) {
-                                        if(xi - i == -1) {
-                                                size += getRight(data, size, wall, i, j);
-                                                size += getBottom(data, size, wall, i, j);
-                                        } else if(xi - i == 0) {
-                                                size += getLeft(data, size, wall, i, j);
-                                                size += getRight(data, size, wall, i, j);
-                                                size += getBottom(data, size, wall, i, j);
-                                        } else if(xi - i == 1) {
-                                                size += getLeft(data, size, wall, i, j);
-                                                size += getBottom(data, size, wall, i, j);
-                                        }
-                                } else if(zi - j == 0) {
-                                        if(xi - i == -1) {
-                                                size += getTop(data, size, wall, i, j);
-                                                size += getRight(data, size, wall, i, j);
-                                                size += getBottom(data, size, wall, i, j);
-                                        } else if(xi - i == 1) {
-                                                size += getTop(data, size, wall, i, j);
-                                                size += getLeft(data, size, wall, i, j);
-                                                size += getBottom(data, size, wall, i, j);
-                                        }
-                                } else if(zi - j == 1) {
-                                        if(xi - i == -1) {
-                                                size += getRight(data, size, wall, i, j);
-                                                size += getTop(data, size, wall, i, j);
-                                        } else if(xi - i == 0) {
-                                                size += getLeft(data, size, wall, i, j);
-                                                size += getRight(data, size, wall, i, j);
-                                                size += getTop(data, size, wall, i, j);
-                                        } else if(xi - i == 1) {
-                                                size += getLeft(data, size, wall, i, j);
-                                                size += getTop(data, size, wall, i, j);
-                                        }
-                                }
-                        }
-                }
-        }
-        return size;
 }
